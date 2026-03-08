@@ -1,5 +1,5 @@
-import { CheckCircle2, Clock, AlertCircle, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CheckCircle2, Clock, AlertCircle, Loader2, Globe, Trash2, Copy, SkipForward } from "lucide-react";
+import { useEffect, useState, useRef, useCallback } from "react";
 
 export interface DownloadItem {
   id: number;
@@ -7,155 +7,214 @@ export interface DownloadItem {
   url: string;
   duration: string;
   date: string;
-  status: "completed" | "downloading" | "queued" | "error";
+  status: "completed" | "downloading" | "queued" | "error" | "stopped" | "duplicate" | "retrying";
   progress?: number;
+  speed?: string;
+  eta?: string;
+  attempt?: number;
 }
 
 const initialData: DownloadItem[] = [
-  { id: 1, title: "Amazing cooking recipe video", url: "facebook.com/reel/120784517", duration: "0:45", date: "2026-03-08", status: "completed", progress: 100 },
-  { id: 2, title: "Street food compilation #viral", url: "facebook.com/reel/983621045", duration: "1:23", date: "2026-03-08", status: "downloading", progress: 0 },
-  { id: 3, title: "Funny cat moments 2026", url: "facebook.com/reel/765432198", duration: "0:32", date: "2026-03-08", status: "queued" },
-  { id: 4, title: "Travel vlog Pakistan mountains", url: "facebook.com/reel/543216789", duration: "2:10", date: "2026-03-07", status: "queued" },
-  { id: 5, title: "DIY home decoration ideas", url: "facebook.com/reel/876543210", duration: "1:55", date: "2026-03-07", status: "queued" },
+  { id: 1, title: "Amazing cooking recipe video", url: "facebook.com/reel/120784517", duration: "0:45", date: "Mar 08, 2026", status: "completed", progress: 100 },
+  { id: 2, title: "Street food compilation #viral", url: "facebook.com/reel/983621045", duration: "1:23", date: "Mar 08, 2026", status: "downloading", progress: 0 },
+  { id: 3, title: "Funny cat moments 2026", url: "facebook.com/reel/765432198", duration: "0:32", date: "Mar 08, 2026", status: "queued" },
+  { id: 4, title: "Travel vlog Pakistan mountains", url: "facebook.com/reel/543216789", duration: "2:10", date: "Mar 07, 2026", status: "queued" },
+  { id: 5, title: "DIY home decoration ideas", url: "facebook.com/reel/876543210", duration: "1:55", date: "Mar 07, 2026", status: "queued" },
 ];
 
-const StatusBadge = ({ status, progress }: { status: DownloadItem["status"]; progress?: number }) => {
-  const config = {
+const StatusBadge = ({ item }: { item: DownloadItem }) => {
+  const configs: Record<string, { icon: React.ElementType; text: string; cls: string }> = {
     completed: { icon: CheckCircle2, text: "Done", cls: "text-success" },
-    downloading: { icon: Loader2, text: `${progress ?? 0}%`, cls: "text-primary" },
-    queued: { icon: Clock, text: "Queued", cls: "text-warning" },
+    downloading: { icon: Loader2, text: `${item.progress ?? 0}%`, cls: "text-primary" },
+    queued: { icon: Clock, text: "Queued", cls: "text-warning/80" },
     error: { icon: AlertCircle, text: "Failed", cls: "text-destructive" },
+    stopped: { icon: AlertCircle, text: "Stopped", cls: "text-muted-foreground" },
+    duplicate: { icon: SkipForward, text: "Duplicate", cls: "text-muted-foreground" },
+    retrying: { icon: Loader2, text: `Retry ${item.attempt}/3`, cls: "text-warning" },
   };
-  const c = config[status];
+  const c = configs[item.status] || configs.queued;
+  const isSpinning = item.status === "downloading" || item.status === "retrying";
+
   return (
-    <div className={`flex items-center gap-1.5 ${c.cls}`}>
-      <c.icon className={`w-3.5 h-3.5 ${status === "downloading" ? "animate-spin" : ""}`} />
-      <span className="text-xs font-medium">{c.text}</span>
-      {status === "downloading" && progress !== undefined && (
-        <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden ml-1">
-          <div
-            className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
-            style={{ width: `${progress}%` }}
-          />
+    <div className="flex items-center gap-2">
+      <div className={`flex items-center gap-1.5 ${c.cls}`}>
+        <c.icon className={`w-3.5 h-3.5 ${isSpinning ? "animate-spin" : ""}`} />
+        <span className="text-[11px] font-semibold">{c.text}</span>
+      </div>
+      {item.status === "downloading" && item.progress !== undefined && (
+        <div className="flex items-center gap-2">
+          <div className="w-24 h-[5px] bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-primary to-primary/70 transition-all duration-300 ease-out"
+              style={{ width: `${item.progress}%` }}
+            />
+          </div>
+          {item.speed && (
+            <span className="text-[9px] text-muted-foreground font-mono">{item.speed}</span>
+          )}
         </div>
       )}
     </div>
   );
 };
 
-const DownloadTable = ({ isDownloading }: { isDownloading: boolean }) => {
+interface DownloadTableProps {
+  isDownloading: boolean;
+}
+
+const DownloadTable = ({ isDownloading }: DownloadTableProps) => {
   const [items, setItems] = useState<DownloadItem[]>(initialData);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; itemId: number } | null>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
 
   // Reset when download starts
   useEffect(() => {
     if (isDownloading) {
-      setItems([
-        { ...initialData[0], status: "completed", progress: 100 },
-        { ...initialData[1], status: "downloading", progress: 0 },
-        { ...initialData[2], status: "queued" },
-        { ...initialData[3], status: "queued" },
-        { ...initialData[4], status: "queued" },
-      ]);
+      setItems(initialData.map((item, i) =>
+        i === 0 ? { ...item, status: "completed", progress: 100 } :
+        { ...item, status: i === 1 ? "downloading" : "queued", progress: i === 1 ? 0 : undefined }
+      ));
     }
   }, [isDownloading]);
 
   // Animate progress
   useEffect(() => {
     if (!isDownloading) return;
-
     const interval = setInterval(() => {
       setItems((prev) => {
         const next = [...prev];
         const dlIdx = next.findIndex((i) => i.status === "downloading");
-
-        if (dlIdx === -1) {
-          clearInterval(interval);
-          return prev;
-        }
-
+        if (dlIdx === -1) { clearInterval(interval); return prev; }
         const current = next[dlIdx];
-        const newProgress = (current.progress ?? 0) + Math.floor(Math.random() * 8 + 3);
+        const newProg = (current.progress ?? 0) + Math.floor(Math.random() * 6 + 2);
+        const speeds = ["1.2 MB/s", "2.4 MB/s", "856 KB/s", "3.1 MB/s"];
 
-        if (newProgress >= 100) {
-          // Complete current, start next
-          next[dlIdx] = { ...current, status: "completed", progress: 100 };
-
-          // Randomly fail item 4
-          const nextIdx = next.findIndex((i) => i.status === "queued");
-          if (nextIdx !== -1) {
-            if (next[nextIdx].id === 4) {
-              next[nextIdx] = { ...next[nextIdx], status: "error" };
-              // Start the one after
-              const afterIdx = next.findIndex((i, idx) => idx > nextIdx && i.status === "queued");
-              if (afterIdx !== -1) {
-                next[afterIdx] = { ...next[afterIdx], status: "downloading", progress: 0 };
-              }
+        if (newProg >= 100) {
+          next[dlIdx] = { ...current, status: "completed", progress: 100, speed: undefined };
+          const nextQIdx = next.findIndex((i) => i.status === "queued");
+          if (nextQIdx !== -1) {
+            if (next[nextQIdx].id === 4) {
+              // Simulate retry then fail
+              next[nextQIdx] = { ...next[nextQIdx], status: "error", attempt: 3 };
+              const after = next.findIndex((i, idx) => idx > nextQIdx && i.status === "queued");
+              if (after !== -1) next[after] = { ...next[after], status: "downloading", progress: 0, speed: "1.8 MB/s" };
             } else {
-              next[nextIdx] = { ...next[nextIdx], status: "downloading", progress: 0 };
+              next[nextQIdx] = { ...next[nextQIdx], status: "downloading", progress: 0, speed: "2.1 MB/s" };
             }
           }
         } else {
-          next[dlIdx] = { ...current, progress: newProgress };
+          next[dlIdx] = { ...current, progress: newProg, speed: speeds[Math.floor(Math.random() * speeds.length)] };
         }
-
         return next;
       });
-    }, 200);
-
+    }, 250);
     return () => clearInterval(interval);
   }, [isDownloading]);
 
+  const handleContextMenu = useCallback((e: React.MouseEvent, itemId: number) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, itemId });
+  }, []);
+
+  useEffect(() => {
+    const close = () => setContextMenu(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, []);
+
   const successCount = items.filter((i) => i.status === "completed").length;
   const errorCount = items.filter((i) => i.status === "error").length;
+  const dlItem = items.find((i) => i.status === "downloading");
 
   return (
-    <div className="bg-card rounded-lg border border-border overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Download Queue</h3>
-        <div className="flex items-center gap-3 text-[11px]">
-          <span className="text-success font-medium">{successCount} done</span>
-          {errorCount > 0 && <span className="text-destructive font-medium">{errorCount} failed</span>}
+    <div ref={tableRef} className="glass-card rounded-lg overflow-hidden animate-slide-up" style={{ animationDelay: "100ms" }}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/50">
+        <div className="flex items-center gap-2">
+          <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Download Queue</h3>
+          <span className="text-[10px] font-mono text-muted-foreground/60">({items.length} items)</span>
+        </div>
+        <div className="flex items-center gap-4 text-[11px]">
+          {dlItem && (
+            <span className="flex items-center gap-1.5 text-primary font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse-dot" />
+              Downloading...
+            </span>
+          )}
+          <span className="text-success font-semibold">{successCount} done</span>
+          {errorCount > 0 && <span className="text-destructive font-semibold">{errorCount} failed</span>}
         </div>
       </div>
-      <div className="overflow-x-auto scrollbar-thin">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-border bg-muted/30">
-              <th className="text-left px-4 py-2 font-semibold text-muted-foreground">#</th>
-              <th className="text-left px-4 py-2 font-semibold text-muted-foreground">Title</th>
-              <th className="text-left px-4 py-2 font-semibold text-muted-foreground">URL</th>
-              <th className="text-left px-4 py-2 font-semibold text-muted-foreground">Duration</th>
-              <th className="text-left px-4 py-2 font-semibold text-muted-foreground">Date</th>
-              <th className="text-left px-4 py-2 font-semibold text-muted-foreground">Status</th>
+
+      {/* Table */}
+      <div className="overflow-x-auto scrollbar-thin max-h-[260px] overflow-y-auto">
+        <table className="w-full text-[11px]">
+          <thead className="sticky top-0 z-10">
+            <tr className="border-b border-border/40 bg-muted/40 backdrop-blur-sm">
+              {["#", "Title", "URL", "Duration", "Date", "Status"].map((h) => (
+                <th key={h} className="text-left px-4 py-2 font-bold text-muted-foreground/80 uppercase tracking-wider text-[10px]">{h}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
+            {items.map((item, idx) => (
               <tr
                 key={item.id}
-                className={`border-b border-border/50 transition-colors duration-300 ${
+                onContextMenu={(e) => handleContextMenu(e, item.id)}
+                className={`border-b border-border/20 transition-all duration-300 cursor-default group ${
                   item.status === "downloading"
-                    ? "bg-primary/5"
+                    ? "bg-primary/[0.04]"
                     : item.status === "completed"
-                    ? "bg-success/5"
+                    ? "bg-success/[0.03]"
                     : item.status === "error"
-                    ? "bg-destructive/5"
-                    : "hover:bg-muted/20"
+                    ? "bg-destructive/[0.03]"
+                    : "hover:bg-muted/30"
                 }`}
+                style={{ animationDelay: `${idx * 40}ms` }}
               >
-                <td className="px-4 py-2.5 text-muted-foreground font-mono">{String(item.id).padStart(2, "0")}</td>
-                <td className="px-4 py-2.5 text-foreground font-medium max-w-[200px] truncate">{item.title}</td>
-                <td className="px-4 py-2.5 text-muted-foreground font-mono max-w-[160px] truncate">{item.url}</td>
+                <td className="px-4 py-2.5 text-muted-foreground font-mono font-semibold">{String(item.id).padStart(2, "0")}</td>
+                <td className="px-4 py-2.5 text-foreground font-medium max-w-[220px] truncate">{item.title}</td>
+                <td className="px-4 py-2.5 text-muted-foreground font-mono max-w-[160px] truncate text-[10px]">{item.url}</td>
                 <td className="px-4 py-2.5 text-muted-foreground font-mono">{item.duration}</td>
-                <td className="px-4 py-2.5 text-muted-foreground">{item.date}</td>
-                <td className="px-4 py-2.5"><StatusBadge status={item.status} progress={item.progress} /></td>
+                <td className="px-4 py-2.5 text-muted-foreground text-[10px]">{item.date}</td>
+                <td className="px-4 py-2.5"><StatusBadge item={item} /></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-card border border-border rounded-lg shadow-2xl py-1 min-w-[160px] animate-scale-in"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <CtxItem icon={Globe} label="Open URL" onClick={() => setContextMenu(null)} />
+          <CtxItem icon={Copy} label="Copy Caption" onClick={() => setContextMenu(null)} />
+          <div className="h-px bg-border/50 my-1" />
+          <CtxItem icon={Trash2} label="Remove Row" danger onClick={() => {
+            setItems((p) => p.filter((i) => i.id !== contextMenu.itemId));
+            setContextMenu(null);
+          }} />
+        </div>
+      )}
     </div>
   );
 };
+
+const CtxItem = ({ icon: Icon, label, danger, onClick }: {
+  icon: React.ElementType; label: string; danger?: boolean; onClick: () => void;
+}) => (
+  <button
+    onClick={onClick}
+    className={`flex items-center gap-2 w-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
+      danger ? "text-destructive hover:bg-destructive/10" : "text-foreground hover:bg-muted/50"
+    }`}
+  >
+    <Icon className="w-3.5 h-3.5" />
+    {label}
+  </button>
+);
 
 export default DownloadTable;

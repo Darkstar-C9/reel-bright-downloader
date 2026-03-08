@@ -1,85 +1,151 @@
-import { Download, Search, Square, RefreshCw, FolderOpen, FileText, Cookie } from "lucide-react";
+import {
+  Download, Search, Square, RefreshCw, FolderOpen, FileText,
+  Cookie, Pause, Play, FileType, Upload
+} from "lucide-react";
 import { useState } from "react";
 
-const UrlInputPanel = ({ onDownload }: { onDownload: () => void }) => {
+interface UrlInputPanelProps {
+  onDownload: () => void;
+  onFetchMeta: () => void;
+  onStop: () => void;
+  isPaused: boolean;
+  onTogglePause: () => void;
+  isDownloading: boolean;
+}
+
+const UrlInputPanel = ({
+  onDownload, onFetchMeta, onStop, isPaused, onTogglePause, isDownloading,
+}: UrlInputPanelProps) => {
   const [urls, setUrls] = useState("");
   const [browser, setBrowser] = useState("firefox");
+  const [namingMode, setNamingMode] = useState<"with_caption" | "without_caption">("with_caption");
+  const [downloadFolder, setDownloadFolder] = useState("C:\\Users\\User\\Downloads\\FB Videos");
+
+  const urlCount = urls.split("\n").filter((l) => l.trim()).length;
 
   return (
-    <div className="space-y-3">
-      {/* URL Input */}
-      <div className="bg-card rounded-lg border border-border p-4">
-        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
-          Paste Facebook URLs (one per line)
-        </label>
+    <div className="space-y-3 animate-slide-up">
+      {/* URL Input Card */}
+      <div className="glass-card rounded-lg p-4">
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+            Facebook Video / Reel URLs (one per line)
+          </label>
+          <div className="flex items-center gap-2">
+            <span className={`text-[11px] font-mono font-semibold ${urlCount > 0 ? "text-primary" : "text-muted-foreground"}`}>
+              {urlCount} link{urlCount !== 1 ? "s" : ""}
+            </span>
+          </div>
+        </div>
+
         <textarea
           value={urls}
           onChange={(e) => setUrls(e.target.value)}
-          placeholder={"https://www.facebook.com/reel/123456789\nhttps://www.facebook.com/watch/?v=987654321"}
-          className="w-full h-28 bg-muted/50 border border-border rounded-md p-3 text-sm text-foreground placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:ring-1 focus:ring-primary font-mono scrollbar-thin"
+          placeholder={"https://www.facebook.com/reel/123456789\nhttps://www.facebook.com/watch/?v=987654321\nhttps://fb.watch/abc123"}
+          className="w-full h-[100px] bg-background/60 border border-border/50 rounded-lg p-3 text-sm text-foreground placeholder:text-muted-foreground/40 resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 font-mono scrollbar-thin transition-all"
         />
-        <div className="flex items-center justify-between mt-2">
-          <span className="text-[11px] text-muted-foreground">
-            {urls.split("\n").filter(Boolean).length} link(s) detected
-          </span>
-          <span className="text-[11px] text-muted-foreground font-mono">
-            File: 01 [1207845171465713].mp4
-          </span>
+
+        {/* Info Row */}
+        <div className="flex items-center justify-between mt-2 px-1">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <FolderOpen className="w-3 h-3" />
+              <span className="font-mono max-w-[240px] truncate">{downloadFolder}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <FileType className="w-3 h-3" />
+            <span className="font-mono">01 [1207845171465713].mp4</span>
+          </div>
         </div>
       </div>
 
       {/* Action Buttons */}
-      <div className="flex flex-wrap gap-2">
-        <ActionBtn icon={Download} label="Download" primary onClick={onDownload} />
-        <ActionBtn icon={Search} label="Fetch Metadata" />
-        <ActionBtn icon={Square} label="Stop" variant="destructive" />
+      <div className="flex flex-wrap items-center gap-2">
+        <ActionBtn icon={Download} label="Download" primary onClick={onDownload} disabled={isDownloading} />
+        <ActionBtn icon={Search} label="Fetch Metadata" onClick={onFetchMeta} />
+
+        {isDownloading && (
+          <>
+            <ActionBtn
+              icon={isPaused ? Play : Pause}
+              label={isPaused ? "Resume" : "Pause"}
+              variant="warning"
+              onClick={onTogglePause}
+            />
+            <ActionBtn icon={Square} label="Stop" variant="destructive" onClick={onStop} />
+          </>
+        )}
+
+        <div className="h-5 w-px bg-border mx-1" />
         <ActionBtn icon={RefreshCw} label="Update yt-dlp" />
-        <ActionBtn icon={FolderOpen} label="Save Folder" />
+        <ActionBtn icon={FolderOpen} label="Save Folder" onClick={() => setDownloadFolder("C:\\Users\\User\\Desktop\\Downloads")} />
         <ActionBtn icon={FileText} label="Export Captions" />
       </div>
 
-      {/* Cookie Selector */}
-      <div className="flex items-center gap-2 bg-card rounded-lg border border-border px-4 py-2.5">
-        <Cookie className="w-4 h-4 text-muted-foreground" />
-        <span className="text-xs text-muted-foreground">Cookies:</span>
-        <select
-          value={browser}
-          onChange={(e) => setBrowser(e.target.value)}
-          className="bg-muted border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-        >
-          <option value="firefox">Firefox</option>
-          <option value="chrome">Chrome</option>
-          <option value="edge">Edge</option>
-        </select>
-        <button className="ml-2 text-xs text-primary hover:text-primary/80 font-medium transition-colors">
-          Load cookies.txt
-        </button>
+      {/* Cookie & Naming Row */}
+      <div className="flex items-center gap-3">
+        {/* Cookie Selector */}
+        <div className="flex items-center gap-2 glass-card rounded-lg px-3 py-2 flex-1">
+          <Cookie className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-[11px] text-muted-foreground font-medium">Cookies:</span>
+          <select
+            value={browser}
+            onChange={(e) => setBrowser(e.target.value)}
+            className="bg-background/60 border border-border/50 rounded-md px-2 py-1 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer"
+          >
+            <option value="firefox">Firefox</option>
+            <option value="chrome">Chrome</option>
+            <option value="edge">Edge</option>
+            <option value="brave">Brave</option>
+            <option value="">None</option>
+          </select>
+          <button className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 font-medium transition-colors ml-1">
+            <Upload className="w-3 h-3" />
+            cookies.txt
+          </button>
+          <span className="text-[10px] text-primary/60 font-mono ml-auto">Auto: {browser || "disabled"}</span>
+        </div>
+
+        {/* Naming Mode */}
+        <div className="flex items-center gap-2 glass-card rounded-lg px-3 py-2">
+          <FileType className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-[11px] text-muted-foreground font-medium">Naming:</span>
+          <select
+            value={namingMode}
+            onChange={(e) => setNamingMode(e.target.value as typeof namingMode)}
+            className="bg-background/60 border border-border/50 rounded-md px-2 py-1 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer"
+          >
+            <option value="with_caption">With Caption</option>
+            <option value="without_caption">ID Only</option>
+          </select>
+        </div>
       </div>
     </div>
   );
 };
 
 const ActionBtn = ({
-  icon: Icon,
-  label,
-  primary,
-  variant,
-  onClick,
+  icon: Icon, label, primary, variant, onClick, disabled,
 }: {
   icon: React.ElementType;
   label: string;
   primary?: boolean;
-  variant?: "destructive";
+  variant?: "destructive" | "warning";
   onClick?: () => void;
+  disabled?: boolean;
 }) => (
   <button
     onClick={onClick}
-    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-md text-xs font-semibold transition-all duration-150 active:scale-95
+    disabled={disabled}
+    className={`flex items-center gap-1.5 px-3.5 py-[7px] rounded-lg text-[11px] font-semibold transition-all duration-150 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed
       ${primary
-        ? "bg-primary text-primary-foreground hover:brightness-110 glow-primary"
+        ? "bg-primary text-primary-foreground hover:brightness-110 glow-primary shadow-sm"
         : variant === "destructive"
-        ? "bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25"
-        : "bg-secondary text-secondary-foreground border border-border hover:bg-muted"
+        ? "bg-destructive/10 text-destructive border border-destructive/25 hover:bg-destructive/20"
+        : variant === "warning"
+        ? "bg-warning/10 text-warning border border-warning/25 hover:bg-warning/20"
+        : "bg-secondary/80 text-secondary-foreground border border-border/50 hover:bg-secondary hover:border-border"
       }`}
   >
     <Icon className="w-3.5 h-3.5" />
