@@ -4,7 +4,7 @@ import {
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "sonner";
-import { startDownload, stopDownload, togglePause, browseFolder, getConfig, updateYtdlp, fetchMetadata } from "@/lib/bridge";
+import { startDownload, stopDownload, togglePause, browseFolder, getConfig, updateYtdlp, fetchMetadata, exportCaptions } from "@/lib/bridge";
 
 interface UrlInputPanelProps {
   onDownload: () => void;
@@ -83,6 +83,12 @@ const UrlInputPanel = ({
     await fetchMetadata(urlList);
     onFetchMeta();
   }, [urls, onFetchMeta]);
+
+  const handleExportCaptions = useCallback(async () => {
+    toast.info("Exporting captions...");
+    const msg = await exportCaptions();
+    toast.success(msg);
+  }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -220,7 +226,7 @@ const UrlInputPanel = ({
         <div className="h-5 w-px bg-border mx-1" />
         <ActionBtn icon={RefreshCw} label="Update yt-dlp" onClick={handleUpdateYtdlp} />
         <ActionBtn icon={FolderOpen} label="Save Folder" onClick={handleBrowseFolder} />
-        <ActionBtn icon={FileText} label="Export Captions" />
+        <ActionBtn icon={FileText} label="Export Captions" onClick={handleExportCaptions} />
       </div>
 
       {/* Cookie & Naming Row */}
