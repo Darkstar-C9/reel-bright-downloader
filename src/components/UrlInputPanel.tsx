@@ -84,6 +84,12 @@ const UrlInputPanel = ({
     onFetchMeta();
   }, [urls, onFetchMeta]);
 
+  const handleExportCaptions = useCallback(async () => {
+    toast.info("Exporting captions...");
+    const msg = await exportCaptions();
+    toast.success(msg);
+  }, []);
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
