@@ -1,6 +1,7 @@
 import { Key, MessageCircle, Send, Shield, Check, Loader2, Lock, Sparkles } from "lucide-react";
 import { useState } from "react";
 import logo from "@/assets/logo.png";
+import { activate } from "@/lib/bridge";
 
 const plans = [
   { name: "Monthly", code: "M", price: "₹299", days: "30 days", icon: "🗓", popular: false },
@@ -20,21 +21,23 @@ const ActivationScreen = ({ onActivate }: { onActivate: () => void }) => {
     { msg: "", type: "idle" }
   );
 
-  const handleActivate = () => {
+  const handleActivate = async () => {
     if (!key.trim()) {
       setStatus({ msg: "⚠️ Please enter your license key", type: "error" });
       return;
     }
     setStatus({ msg: "Checking license, please wait...", type: "loading" });
-    // Simulate validation
-    setTimeout(() => {
-      if (key.includes("FBPRO")) {
-        setStatus({ msg: "✅ Valid | Plan: YEARLY | 247 days left", type: "success" });
+    try {
+      const result = await activate(key);
+      if (result.valid) {
+        setStatus({ msg: result.message || "✅ License activated!", type: "success" });
         setTimeout(onActivate, 800);
       } else {
-        setStatus({ msg: "❌ Invalid license key format", type: "error" });
+        setStatus({ msg: result.message || "❌ Invalid license key", type: "error" });
       }
-    }, 1500);
+    } catch {
+      setStatus({ msg: "❌ Activation failed — bridge error", type: "error" });
+    }
   };
 
   return (

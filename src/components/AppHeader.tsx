@@ -1,6 +1,7 @@
 import { Clock, Shield, Wifi, WifiOff } from "lucide-react";
 import { useState, useEffect } from "react";
 import logo from "@/assets/logo.png";
+import { getLicenseStatus, type LicenseStatus } from "@/lib/bridge";
 
 interface AppHeaderProps {
   licenseInfo?: {
@@ -11,14 +12,29 @@ interface AppHeaderProps {
   onLicenseClick: () => void;
 }
 
-const AppHeader = ({ licenseInfo, onLicenseClick }: AppHeaderProps) => {
+const AppHeader = ({ licenseInfo: propLicense, onLicenseClick }: AppHeaderProps) => {
   const [time, setTime] = useState(new Date());
   const [online] = useState(true);
+  const [licenseInfo, setLicenseInfo] = useState(propLicense);
 
   useEffect(() => {
     const t = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  // Fetch license from bridge on mount
+  useEffect(() => {
+    getLicenseStatus().then((status) => {
+      if (status && status.valid) {
+        setLicenseInfo({ plan: status.plan, daysLeft: status.daysLeft, isLifetime: status.isLifetime });
+      }
+    });
+  }, []);
+
+  // Sync prop changes
+  useEffect(() => {
+    if (propLicense) setLicenseInfo(propLicense);
+  }, [propLicense]);
 
   const dateStr = time.toLocaleDateString("en-US", {
     month: "short", day: "numeric", year: "numeric",
