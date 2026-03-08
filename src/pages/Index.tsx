@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Settings, Info, LogIn } from "lucide-react";
 import AppHeader from "@/components/AppHeader";
 import UrlInputPanel from "@/components/UrlInputPanel";
@@ -13,6 +13,15 @@ const Index = () => {
   const [activated, setActivated] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadKey, setDownloadKey] = useState(0);
+
+  const handleDownload = useCallback(() => {
+    setIsDownloading(false);
+    setDownloadKey((k) => k + 1);
+    // Small delay to reset state then start
+    setTimeout(() => setIsDownloading(true), 50);
+  }, []);
 
   if (!activated) {
     return <ActivationScreen onActivate={() => setActivated(true)} />;
@@ -31,9 +40,9 @@ const Index = () => {
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-thin">
-        <UrlInputPanel />
-        <DownloadTable />
-        <LogPanel />
+        <UrlInputPanel onDownload={handleDownload} />
+        <DownloadTable key={downloadKey} isDownloading={isDownloading} />
+        <LogPanel isDownloading={isDownloading} />
       </div>
 
       <StatusBar />

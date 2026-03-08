@@ -1,7 +1,7 @@
 import { Download, Search, Square, RefreshCw, FolderOpen, FileText, Cookie } from "lucide-react";
 import { useState } from "react";
 
-const UrlInputPanel = () => {
+const UrlInputPanel = ({ onDownload }: { onDownload: () => void }) => {
   const [urls, setUrls] = useState("");
   const [browser, setBrowser] = useState("firefox");
 
@@ -30,7 +30,7 @@ const UrlInputPanel = () => {
 
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-2">
-        <ActionBtn icon={Download} label="Download" primary />
+        <ActionBtn icon={Download} label="Download" primary onClick={onDownload} />
         <ActionBtn icon={Search} label="Fetch Metadata" />
         <ActionBtn icon={Square} label="Stop" variant="destructive" />
         <ActionBtn icon={RefreshCw} label="Update yt-dlp" />
@@ -64,14 +64,17 @@ const ActionBtn = ({
   label,
   primary,
   variant,
+  onClick,
 }: {
   icon: React.ElementType;
   label: string;
   primary?: boolean;
   variant?: "destructive";
+  onClick?: () => void;
 }) => (
   <button
-    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-md text-xs font-semibold transition-all duration-150
+    onClick={onClick}
+    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-md text-xs font-semibold transition-all duration-150 active:scale-95
       ${primary
         ? "bg-primary text-primary-foreground hover:brightness-110 glow-primary"
         : variant === "destructive"
