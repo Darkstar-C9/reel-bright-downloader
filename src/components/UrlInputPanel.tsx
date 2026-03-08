@@ -1,9 +1,9 @@
 import {
   Download, Search, Square, RefreshCw, FolderOpen, FileText,
-  Cookie, Pause, Play, FileType, Upload
+  Cookie, Pause, Play, FileType, Upload, FileUp
 } from "lucide-react";
-import { useState } from "react";
-
+import { useState, useRef, useCallback } from "react";
+import { toast } from "sonner";
 interface UrlInputPanelProps {
   onDownload: () => void;
   onFetchMeta: () => void;
@@ -22,28 +22,122 @@ const UrlInputPanel = ({
   const [downloadFolder, setDownloadFolder] = useState("C:\\Users\\User\\Downloads\\FB Videos");
 
   const urlCount = urls.split("\n").filter((l) => l.trim()).length;
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    // Handle text drops
+    const text = e.dataTransfer.getData("text/plain");
+    if (text) {
+      setUrls((prev) => (prev ? prev + "\n" + text : text));
+      toast.success(`${text.split("\n").filter(l => l.trim()).length} URL(s) added from drop`);
+      return;
+    }
+
+    // Handle file drops
+    const files = Array.from(e.dataTransfer.files);
+    files.forEach((file) => {
+      if (file.type === "text/plain" || file.name.endsWith(".txt")) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const content = ev.target?.result as string;
+          if (content) {
+            setUrls((prev) => (prev ? prev + "\n" + content : content));
+            toast.success(`${content.split("\n").filter(l => l.trim()).length} URL(s) imported from ${file.name}`);
+          }
+        };
+        reader.readAsText(file);
+      } else {
+        toast.error("Only .txt files are supported");
+      }
+    });
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback(() => setIsDragOver(false), []);
+
+  const handleFileImport = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string;
+      if (content) {
+        setUrls((prev) => (prev ? prev + "\n" + content : content));
+        toast.success(`${content.split("\n").filter(l => l.trim()).length} URL(s) imported from ${file.name}`);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }, []);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    // Let default paste handle it, but show a toast
+    setTimeout(() => {
+      const count = urls.split("\n").filter(l => l.trim()).length;
+      if (count > 0) toast.info(`${count} URL(s) in queue`);
+    }, 100);
+  }, [urls]);
 
   return (
     <div className="space-y-3 animate-slide-up">
+      {/* Hidden file input */}
+      <input ref={fileInputRef} type="file" accept=".txt,text/plain" className="hidden" onChange={handleFileChange} />
+
       {/* URL Input Card */}
-      <div className="glass-card rounded-lg p-4">
+      <div
+        className={`glass-card rounded-lg p-4 transition-all duration-200 ${isDragOver ? "ring-2 ring-primary/50 bg-primary/[0.03]" : ""}`}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+      >
         <div className="flex items-center justify-between mb-2">
           <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
             Facebook Video / Reel URLs (one per line)
           </label>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleFileImport}
+              className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 font-medium transition-colors"
+            >
+              <FileUp className="w-3 h-3" />
+              Import .txt
+            </button>
             <span className={`text-[11px] font-mono font-semibold ${urlCount > 0 ? "text-primary" : "text-muted-foreground"}`}>
               {urlCount} link{urlCount !== 1 ? "s" : ""}
             </span>
           </div>
         </div>
 
-        <textarea
-          value={urls}
-          onChange={(e) => setUrls(e.target.value)}
-          placeholder={"https://www.facebook.com/reel/123456789\nhttps://www.facebook.com/watch/?v=987654321\nhttps://fb.watch/abc123"}
-          className="w-full h-[100px] bg-background/60 border border-border/50 rounded-lg p-3 text-sm text-foreground placeholder:text-muted-foreground/40 resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 font-mono scrollbar-thin transition-all"
-        />
+        {isDragOver && (
+          <div className="flex items-center justify-center h-[100px] border-2 border-dashed border-primary/40 rounded-lg bg-primary/[0.05] mb-0">
+            <div className="flex flex-col items-center gap-1 text-primary">
+              <FileUp className="w-6 h-6" />
+              <span className="text-[12px] font-semibold">Drop URLs or .txt file here</span>
+            </div>
+          </div>
+        )}
+
+        {!isDragOver && (
+          <textarea
+            value={urls}
+            onChange={(e) => setUrls(e.target.value)}
+            onPaste={handlePaste}
+            placeholder={"https://www.facebook.com/reel/123456789\nhttps://www.facebook.com/watch/?v=987654321\nhttps://fb.watch/abc123\n\n💡 Drag & drop a .txt file or paste URLs here"}
+            className="w-full h-[100px] bg-background/60 border border-border/50 rounded-lg p-3 text-sm text-foreground placeholder:text-muted-foreground/40 resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 font-mono scrollbar-thin transition-all"
+          />
+        )}
 
         {/* Info Row */}
         <div className="flex items-center justify-between mt-2 px-1">
