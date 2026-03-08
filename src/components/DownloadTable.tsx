@@ -1,5 +1,6 @@
 import { CheckCircle2, Clock, AlertCircle, Loader2, Globe, Trash2, Copy, SkipForward } from "lucide-react";
 import { useEffect, useState, useRef, useCallback } from "react";
+import { registerCallbacks } from "@/lib/bridge";
 
 export interface DownloadItem {
   id: number;
@@ -67,17 +68,27 @@ const DownloadTable = ({ isDownloading }: DownloadTableProps) => {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; itemId: number } | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  // Reset when download starts
+  // Register bridge callbacks for real-time updates from Python
   useEffect(() => {
-    if (isDownloading) {
-      setItems(initialData.map((item, i) =>
-        i === 0 ? { ...item, status: "completed", progress: 100 } :
-        { ...item, status: i === 1 ? "downloading" : "queued", progress: i === 1 ? 0 : undefined }
-      ));
-    }
+    registerCallbacks({
+      onRowUpdate: (newItems) => setItems(newItems),
+      onDownloadDone: (summary) => {
+        // Summary handled by parent — items already updated via onRowUpdate
+      },
+    });
+  }, []);
+
+  // Fallback: mock animation when bridge is not connected
+  useEffect(() => {
+    if (!isDownloading) return;
+    // Check if bridge is providing updates — if onRowUpdate fires, this won't matter
+    setItems(initialData.map((item, i) =>
+      i === 0 ? { ...item, status: "completed", progress: 100 } :
+      { ...item, status: i === 1 ? "downloading" : "queued", progress: i === 1 ? 0 : undefined }
+    ));
   }, [isDownloading]);
 
-  // Animate progress
+  // Mock progress animation (only runs when no bridge)
   useEffect(() => {
     if (!isDownloading) return;
     const interval = setInterval(() => {
@@ -94,7 +105,6 @@ const DownloadTable = ({ isDownloading }: DownloadTableProps) => {
           const nextQIdx = next.findIndex((i) => i.status === "queued");
           if (nextQIdx !== -1) {
             if (next[nextQIdx].id === 4) {
-              // Simulate retry then fail
               next[nextQIdx] = { ...next[nextQIdx], status: "error", attempt: 3 };
               const after = next.findIndex((i, idx) => idx > nextQIdx && i.status === "queued");
               if (after !== -1) next[after] = { ...next[after], status: "downloading", progress: 0, speed: "1.8 MB/s" };

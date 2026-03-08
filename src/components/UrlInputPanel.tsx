@@ -2,8 +2,10 @@ import {
   Download, Search, Square, RefreshCw, FolderOpen, FileText,
   Cookie, Pause, Play, FileType, Upload, FileUp
 } from "lucide-react";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "sonner";
+import { startDownload, stopDownload, togglePause, browseFolder, getConfig, updateYtdlp, fetchMetadata } from "@/lib/bridge";
+
 interface UrlInputPanelProps {
   onDownload: () => void;
   onFetchMeta: () => void;
@@ -25,19 +27,72 @@ const UrlInputPanel = ({
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Load config from bridge on mount
+  useEffect(() => {
+    getConfig().then((cfg) => {
+      setDownloadFolder(cfg.downloadFolder);
+      setBrowser(cfg.cookieSource);
+      setNamingMode(cfg.namingMode);
+    });
+  }, []);
+
+  const handleDownloadClick = useCallback(async () => {
+    const urlList = urls.split("\n").filter((l) => l.trim());
+    if (urlList.length === 0) {
+      toast.error("No URLs to download");
+      return;
+    }
+    try {
+      const result = await startDownload(urlList, browser, "");
+      if (result.started) {
+        onDownload();
+      }
+    } catch {
+      toast.error("Failed to start download");
+    }
+  }, [urls, browser, onDownload]);
+
+  const handleStopClick = useCallback(async () => {
+    await stopDownload();
+    onStop();
+  }, [onStop]);
+
+  const handleTogglePauseClick = useCallback(async () => {
+    await togglePause();
+    onTogglePause();
+  }, [onTogglePause]);
+
+  const handleBrowseFolder = useCallback(async () => {
+    const folder = await browseFolder();
+    if (folder) {
+      setDownloadFolder(folder);
+      toast.success(`Folder set: ${folder}`);
+    }
+  }, []);
+
+  const handleUpdateYtdlp = useCallback(async () => {
+    toast.info("Checking for yt-dlp updates...");
+    const msg = await updateYtdlp();
+    toast.success(msg);
+  }, []);
+
+  const handleFetchMeta = useCallback(async () => {
+    const urlList = urls.split("\n").filter((l) => l.trim());
+    if (urlList.length === 0) { toast.error("No URLs"); return; }
+    toast.info("Fetching metadata...");
+    await fetchMetadata(urlList);
+    onFetchMeta();
+  }, [urls, onFetchMeta]);
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-
-    // Handle text drops
     const text = e.dataTransfer.getData("text/plain");
     if (text) {
       setUrls((prev) => (prev ? prev + "\n" + text : text));
       toast.success(`${text.split("\n").filter(l => l.trim()).length} URL(s) added from drop`);
       return;
     }
-
-    // Handle file drops
     const files = Array.from(e.dataTransfer.files);
     files.forEach((file) => {
       if (file.type === "text/plain" || file.name.endsWith(".txt")) {
@@ -56,16 +111,9 @@ const UrlInputPanel = ({
     });
   }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  }, []);
-
+  const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); }, []);
   const handleDragLeave = useCallback(() => setIsDragOver(false), []);
-
-  const handleFileImport = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
+  const handleFileImport = useCallback(() => { fileInputRef.current?.click(); }, []);
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -83,7 +131,6 @@ const UrlInputPanel = ({
   }, []);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    // Let default paste handle it, but show a toast
     setTimeout(() => {
       const count = urls.split("\n").filter(l => l.trim()).length;
       if (count > 0) toast.info(`${count} URL(s) in queue`);
@@ -92,7 +139,6 @@ const UrlInputPanel = ({
 
   return (
     <div className="space-y-3 animate-slide-up">
-      {/* Hidden file input */}
       <input ref={fileInputRef} type="file" accept=".txt,text/plain" className="hidden" onChange={handleFileChange} />
 
       {/* URL Input Card */}
@@ -156,8 +202,8 @@ const UrlInputPanel = ({
 
       {/* Action Buttons */}
       <div className="flex flex-wrap items-center gap-2">
-        <ActionBtn icon={Download} label="Download" primary onClick={onDownload} disabled={isDownloading} />
-        <ActionBtn icon={Search} label="Fetch Metadata" onClick={onFetchMeta} />
+        <ActionBtn icon={Download} label="Download" primary onClick={handleDownloadClick} disabled={isDownloading} />
+        <ActionBtn icon={Search} label="Fetch Metadata" onClick={handleFetchMeta} />
 
         {isDownloading && (
           <>
@@ -165,21 +211,20 @@ const UrlInputPanel = ({
               icon={isPaused ? Play : Pause}
               label={isPaused ? "Resume" : "Pause"}
               variant="warning"
-              onClick={onTogglePause}
+              onClick={handleTogglePauseClick}
             />
-            <ActionBtn icon={Square} label="Stop" variant="destructive" onClick={onStop} />
+            <ActionBtn icon={Square} label="Stop" variant="destructive" onClick={handleStopClick} />
           </>
         )}
 
         <div className="h-5 w-px bg-border mx-1" />
-        <ActionBtn icon={RefreshCw} label="Update yt-dlp" />
-        <ActionBtn icon={FolderOpen} label="Save Folder" onClick={() => setDownloadFolder("C:\\Users\\User\\Desktop\\Downloads")} />
+        <ActionBtn icon={RefreshCw} label="Update yt-dlp" onClick={handleUpdateYtdlp} />
+        <ActionBtn icon={FolderOpen} label="Save Folder" onClick={handleBrowseFolder} />
         <ActionBtn icon={FileText} label="Export Captions" />
       </div>
 
       {/* Cookie & Naming Row */}
       <div className="flex items-center gap-3">
-        {/* Cookie Selector */}
         <div className="flex items-center gap-2 glass-card rounded-lg px-3 py-2 flex-1">
           <Cookie className="w-3.5 h-3.5 text-muted-foreground" />
           <span className="text-[11px] text-muted-foreground font-medium">Cookies:</span>
@@ -201,7 +246,6 @@ const UrlInputPanel = ({
           <span className="text-[10px] text-primary/60 font-mono ml-auto">Auto: {browser || "disabled"}</span>
         </div>
 
-        {/* Naming Mode */}
         <div className="flex items-center gap-2 glass-card rounded-lg px-3 py-2">
           <FileType className="w-3.5 h-3.5 text-muted-foreground" />
           <span className="text-[11px] text-muted-foreground font-medium">Naming:</span>

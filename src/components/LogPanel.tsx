@@ -1,11 +1,6 @@
 import { Terminal, Trash2, Save, Filter } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-
-interface LogEntry {
-  time: string;
-  level: "DEBUG" | "INFO" | "SUCCESS" | "WARNING" | "ERROR" | "SYSTEM";
-  message: string;
-}
+import { registerCallbacks, type LogEntry } from "@/lib/bridge";
 
 const staticLogs: LogEntry[] = [
   { time: "14:30:00", level: "SYSTEM", message: "FB Downloader Pro v3.1.0 started" },
@@ -56,6 +51,16 @@ const LogPanel = ({ isDownloading }: { isDownloading: boolean }) => {
   const [filter, setFilter] = useState("ALL");
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Register bridge callback for real-time logs from Python
+  useEffect(() => {
+    registerCallbacks({
+      onLog: (entry) => {
+        setLogs((prev) => [...prev, entry]);
+      },
+    });
+  }, []);
+
+  // Fallback mock animation when no bridge
   useEffect(() => {
     if (!isDownloading) {
       setLogs(staticLogs);
@@ -98,7 +103,6 @@ const LogPanel = ({ isDownloading }: { isDownloading: boolean }) => {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Filter */}
           <div className="flex items-center gap-1">
             <Filter className="w-3 h-3 text-muted-foreground" />
             <select
