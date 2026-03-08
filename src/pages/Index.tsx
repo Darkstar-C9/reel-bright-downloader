@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
-import { Settings, Info, LogIn, Key } from "lucide-react";
+import { Settings, Info, Key, History } from "lucide-react";
+import { toast } from "sonner";
 import AppHeader from "@/components/AppHeader";
 import UrlInputPanel from "@/components/UrlInputPanel";
 import DownloadTable from "@/components/DownloadTable";
@@ -9,11 +10,13 @@ import ActivationScreen from "@/components/ActivationScreen";
 import SettingsPanel from "@/components/SettingsPanel";
 import AboutScreen from "@/components/AboutScreen";
 import CrashRecoveryBanner from "@/components/CrashRecoveryBanner";
+import DownloadHistory from "@/components/DownloadHistory";
 
 const Index = () => {
   const [activated, setActivated] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [downloadKey, setDownloadKey] = useState(0);
@@ -23,16 +26,25 @@ const Index = () => {
     setIsDownloading(false);
     setDownloadKey((k) => k + 1);
     setShowCrashRecovery(false);
-    setTimeout(() => setIsDownloading(true), 50);
+    toast.info("🚀 Starting download queue...", { duration: 2000 });
+    setTimeout(() => {
+      setIsDownloading(true);
+      toast.success("Download started — 5 items in queue");
+    }, 50);
   }, []);
 
   const handleStop = useCallback(() => {
     setIsDownloading(false);
     setIsPaused(false);
+    toast.warning("⏹ Download stopped");
   }, []);
 
   const handleTogglePause = useCallback(() => {
-    setIsPaused((p) => !p);
+    setIsPaused((p) => {
+      const next = !p;
+      toast.info(next ? "⏸ Downloads paused" : "▶️ Downloads resumed", { duration: 1500 });
+      return next;
+    });
   }, []);
 
   if (!activated) {
@@ -48,6 +60,7 @@ const Index = () => {
 
       {/* Toolbar */}
       <div className="flex items-center justify-end gap-0.5 px-5 py-1 border-b border-border/40 bg-card/40">
+        <ToolbarBtn icon={History} label="History" onClick={() => setShowHistory(true)} />
         <ToolbarBtn icon={Settings} label="Settings" onClick={() => setShowSettings(true)} />
         <ToolbarBtn icon={Info} label="About" onClick={() => setShowAbout(true)} />
         <ToolbarBtn icon={Key} label="License" onClick={() => setActivated(false)} />
@@ -82,6 +95,7 @@ const Index = () => {
       {/* Modals */}
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
       {showAbout && <AboutScreen onClose={() => setShowAbout(false)} />}
+      {showHistory && <DownloadHistory onClose={() => setShowHistory(false)} />}
     </div>
   );
 };
